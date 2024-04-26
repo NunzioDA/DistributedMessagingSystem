@@ -1,3 +1,6 @@
+# Creato da Nunzio D'Amore
+
+
 import hashlib
 import base64
 from cryptography.hazmat.primitives import serialization

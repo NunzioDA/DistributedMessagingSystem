@@ -1,3 +1,5 @@
+# Creato da Nunzio D'Amore
+
 import hashlib
 
 
