@@ -17,12 +17,18 @@ def request_network_discovery(elite_server_address, username, server_id):
         message = DISCOVERY_MSG + ";" + username + ";" + str(server_id)
         client_socket.sendall(message.encode())
 
+        result = b""
+
         while True:
             data = client_socket.recv(1024)
             if(not data):
                 break
-
+            else:
+                result += data
+            
         client_socket.close()
+        return result
+
     except socket.error as e:
         print("Connection failed:", e)
         return False
