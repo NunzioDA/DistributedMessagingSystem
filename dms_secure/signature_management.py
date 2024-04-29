@@ -44,13 +44,9 @@ def sign_message(private_key, message):
         ec.SECP256R1()
     )
 
-    
-    # Codifica il messaggio in una sequenza di byte utilizzando UTF-8
-    message_bytes = message.encode('utf-8')
-    
     # Firma il messaggio utilizzando la chiave privata
     signature_bytes = derived_private_key.sign(
-        message_bytes,
+        message,
         ec.ECDSA(hashes.SHA256())
     )
     
@@ -70,9 +66,7 @@ def verify_signature(public_key_str, signature_str, message):
         decoded_public_key,
         backend=default_backend()
     )
-    
-    # Codifica il messaggio in una sequenza di byte utilizzando UTF-8
-    message_bytes = message.encode('utf-8')
+
     
     # Converte la firma da stringa esadecimale a byte
     signature_bytes = bytes.fromhex(signature_str)
@@ -81,7 +75,7 @@ def verify_signature(public_key_str, signature_str, message):
         # Verifica la firma utilizzando la chiave pubblica
         public_key.verify(
             signature_bytes,
-            message_bytes,
+            message,
             ec.ECDSA(hashes.SHA256())
         )
         return True
