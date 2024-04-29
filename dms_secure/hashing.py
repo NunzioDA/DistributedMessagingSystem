@@ -18,7 +18,7 @@ def hash_to_range(input_string, range_1, range_2 = None):
         range_min =range_1
         range_max =range_2
 
-    hashed = hashlib.sha256(input_string.encode()).hexdigest()
+    hashed = hashlib.sha256(input_string).hexdigest()
     hashed = hashlib.sha256(hashed.encode()).hexdigest()
     
     hashed_int = int(hashed, 16)
