@@ -1,28 +1,41 @@
 import socket
 
+END_MESSAGE_BYTE = b'\x00'
 
-def send(address, command):
+
+def send_and_get_response(address, command):
     server_address = ('localhost', address)
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     try:
-        client_socket.connect(server_address)
+        server_socket.connect(server_address)
         message = ";".join(command)
-        client_socket.sendall(message.encode())
+        send_all(server_socket,message.encode())
 
-        response = b""
-
-        while True:
-            data = client_socket.recv(1024)
-            if(not data):
-                break
-
-            response += data
+        response = receive_data(server_socket)
         
 
-        client_socket.close()
+        server_socket.close()
     except socket.error as e:
-        print("Connection failed:", e)
+        print("Connection failed["+ str(address) +"]:", e)
         return False
     
     return response
+
+def receive_data(_socket):
+    response = b""
+    
+    while True:
+        data = _socket.recv(1024)
+        if(not data):
+            break
+        response += data
+
+        if b'\x00' in data:
+            response = response[:-1]
+            break
+        
+    return response
+
+def send_all(_socket, message):
+    _socket.sendall(message+END_MESSAGE_BYTE)
