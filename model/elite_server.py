@@ -4,9 +4,11 @@
 ##
 
 import json
+import os
 import threading
 import socket
 from communication_API.elite_servers_API import *
+from communication_API.server_API import new_server_in_cluster
 from dms_secure.hashing import *
 import random
 
@@ -29,17 +31,32 @@ class EliteServer:
 
     def __init__(self, elite_address):
         self.elite_address = elite_address    
-        self.servers_file_path = "./data/" + str(self.elite_address) + "/servers.json"
+
+        base_path = "./data/elite/" + str(self.elite_address)
+
+        self.servers_file_path = base_path + "/servers.json"
+
+        if(not os.path.exists(base_path)):
+            os.makedirs(base_path)
+        
+        if(not os.path.exists(self.servers_file_path)):
+            with open(self.servers_file_path, "w") as servers_f:
+                json.dump([[], [], []], servers_f)
+
 
         self.elite_request_handler_thread = threading.Thread(target=self.start_socket_listener, args=[elite_address])
         self.elite_request_handler_thread.start()
+        
+
+    def wait_for_threads(self):
         self.elite_request_handler_thread.join()
+    
 
     # Gestisce le richieste di discovery 
     def elite_request_handler(self, client_socket):
         try:
-            print("Handling connection")
-            data = client_socket.recv(1024)
+            self._log("Handling connection")
+            data = receive_data(client_socket)
             parameters = data.decode().split(";")
 
             command = parameters[0]
@@ -51,7 +68,8 @@ class EliteServer:
                 self.discover_request(client_socket, username, server_id)
             elif(command == ENROLL_MSG):
                 server_id = parameters[1]
-                self.enroll_server(client_socket, server_id)
+                propagate = parameters[2]
+                self.enroll_server(client_socket, server_id, propagate)
                 
             client_socket.close()
         finally:
@@ -68,18 +86,18 @@ class EliteServer:
         try:
             #Ciclo di gestione client parallela
             while True:           
-                print("Discovery handler listening...")           
+                self._log("Discovery handler listening...")           
                 client_socket, client_address = self.server_socket.accept()
 
                 # Avvio thread di gestione delle richieste
                 handler_thread = threading.Thread(target=self.elite_request_handler, args=(client_socket,))
                 handler_thread.start()
         except KeyboardInterrupt:
-            print("Interruzione da tastiera. Chiudo il socket...")
+            self._log("Interruzione da tastiera. Chiudo il socket...")
             self.on_close()          
 
         except Exception as e:
-            print("Error:", e)
+            self._log("Error:", e)
         
             
 
@@ -108,44 +126,46 @@ class EliteServer:
                 else:
                     clusters[i] = clusters[i]
             
-        client_socket.sendall(json.dumps(clusters).encode())
+        send_all(client_socket,json.dumps(clusters).encode())
 
-    def enroll_server(self, client_socket, server_address):
+    def enroll_server(self, client_socket, server_address, propagate):
         try:
             with open(self.servers_file_path, 'r') as servers_file:
                 clusters = json.load(servers_file)
 
-                # La funzione seguente ottiene l'indice dell'array in clusters 
-                # con meno elementi, ottenendo il cluster con meno server al suo interno
-                min_index = min(range(len(clusters)), key=lambda i: len(clusters[i]))
-                
-                server_already_enrolled = False
+                min_index = hash_to_range(str(server_address).encode(), len(clusters))
 
-                for cluster in clusters:
-                    if(int(server_address) in cluster):
-                        server_already_enrolled = True
-                        break
+                server_already_enrolled = int(server_address) in clusters[min_index]
 
                 if(not server_already_enrolled):
                     clusters[min_index].append(int(server_address))
 
-                self.propagate_enroll_request(server_address)
-
             with open(self.servers_file_path, 'w') as file:
                 json.dump(clusters, file)
 
-            client_socket.sendall("OK".encode())
+            send_all(client_socket,b"OK")
+
+            if(propagate == "1"):
+                self.propagate_enroll_request(server_address, clusters[min_index])
+
         except Exception as e:
-            client_socket.sendall(str(e).encode())
+            send_all(client_socket,str(e).encode())
 
         client_socket.close()
         
-    def propagate_enroll_request(self,server_address):
+    def propagate_enroll_request(self,server_address, servers_in_cluster):
         with open(KNOWN_SERVER_FILE, "r") as known_servers:
-                    for elite_server_address in json.load(known_servers):
-                        if(elite_server_address != self.elite_address):
-                            enroll_server(elite_server_address, server_address)
+            for elite_server_address in json.load(known_servers):
+                if(elite_server_address != self.elite_address):
+                    enroll_server(elite_server_address, server_address, 0)
+            
+        for server in servers_in_cluster:
+            if(int(server) != int(server_address)):
+                new_server_in_cluster(server, server_address,self.elite_address)
+
     def on_close(self):
         self.server_socket.close()
     
 
+    def _log(self, *log):
+        print("ELITE[", self.elite_address , "]: ", *log)
