@@ -1,4 +1,5 @@
 import socket
+from communication_API.socket_communication import *
 
 # Message to request network discovery
 # other parameters: username and server id
@@ -10,44 +11,37 @@ ENROLL_MSG = "ENROLL"
 
 def request_network_discovery(elite_server_address, username, server_id):
     server_address = ('localhost', elite_server_address)
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     try:
-        client_socket.connect(server_address)
+        server_socket.connect(server_address)
         message = DISCOVERY_MSG + ";" + username + ";" + str(server_id)
-        client_socket.sendall(message.encode())
+        send_all(server_socket, message.encode())
 
-        result = b""
-
-        while True:
-            data = client_socket.recv(1024)
-            if(not data):
-                break
-            else:
-                result += data
+        result = receive_data(server_socket)
             
-        client_socket.close()
+        server_socket.close()
         return result
 
     except socket.error as e:
-        print("Connection failed:", e)
+        print("c[elite server " + str(elite_server_address) + "]:", e)
         return False
     
-def enroll_server(elite_server_address, server_id):
+def enroll_server(elite_server_address, server_id, propagate = 1):
     server_address = ('localhost', elite_server_address)
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     try:
-        client_socket.connect(server_address)
-        message = ENROLL_MSG + ";" + str(server_id)
-        client_socket.sendall(message.encode())
+        server_socket.connect(server_address)
+        message = ENROLL_MSG + ";" + str(server_id) + ";" + str(propagate)
+        send_all(server_socket,message.encode())
 
-        data = client_socket.recv(1024)            
+        data = receive_data(server_socket)      
 
         print("Dati ricevuti dal server:", data.decode())
 
-        client_socket.close()
+        server_socket.close()
         return data.decode() == "OK"
     except socket.error as e:
-        print("Connection failed:", e)
+        print("Connection failed[elite server " + str(elite_server_address) + "]:", e)
         return False
