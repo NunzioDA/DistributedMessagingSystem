@@ -6,14 +6,15 @@ from datetime import datetime, timezone
 import socket
 from communication_API.socket_communication import *
 from model.message import Message
-
-USER_INFO_PATH = "./data/users/"
+from dms_secure.signature_management import sign_message
 
 
 SEND_MSG = "SEND"
 RANGE_MSG = "RANGE"
 VERSION_MSG = "VERSION"
 SOCIAL_TREE_MSG = "SOCIAL_TREE"
+NOTIFY_ADDRESS_MSG = "NOTIFY_ADDRESS"
+NEW_SERVER_MSG = "NEW_SERVER_MSG"
 
 
 def send_message(address, message : Message, sender_address = ""):
@@ -23,7 +24,7 @@ def send_message(address, message : Message, sender_address = ""):
         message.sender_key = "None"
         message.key_signature = "None"
 
-    return send(
+    return send_and_get_response(
         address, 
         [
             str(sender_address),
@@ -40,7 +41,7 @@ def get_chat_range(address, message_start : Message, message_end : Message, send
     else:
         message_start_j = message_start.to_json()
 
-    return send(
+    return send_and_get_response(
         address, 
         [
             str(sender_address),
@@ -51,7 +52,7 @@ def get_chat_range(address, message_start : Message, message_end : Message, send
     )
 
 def get_version(address, chat_sender, chat_receiver, sender_address = ""):
-    return send(
+    return send_and_get_response(
         address, 
         [
             str(sender_address),
@@ -62,10 +63,45 @@ def get_version(address, chat_sender, chat_receiver, sender_address = ""):
     )
 
 def get_social_tree(address, sender_address = ""):
-    return send(
+    return send_and_get_response(
         address, 
         [
             str(sender_address),
             SOCIAL_TREE_MSG,
         ]
     )
+
+def new_server_in_cluster(address, new_server, sender_address=""):
+    return send_and_get_response(
+        address, 
+        [
+            str(sender_address),
+            NEW_SERVER_MSG,
+            new_server
+        ]
+    )
+
+def notify_client_address(address, username, private_signature_key, sender_address = 0):
+    server_address = ('localhost', address)
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    try:
+        server_socket.connect(server_address)
+        message = str(sender_address) + ";" + NOTIFY_ADDRESS_MSG
+        send_all(server_socket, message.encode())
+
+        salt = receive_data(server_socket)
+        signature = sign_message(private_signature_key, salt + username.encode() + str(sender_address).encode())
+
+        message = username + ";" + signature 
+
+        send_all(server_socket, message.encode())
+
+        response = receive_data(server_socket)
+
+        server_socket.close()
+    except socket.error as e:
+        print("Connection failed["+str(address)+"]:", e)
+        return False
+    
+    return response
