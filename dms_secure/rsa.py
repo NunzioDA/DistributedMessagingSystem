@@ -111,7 +111,7 @@ def encrypt_message_RSA(message, public_key):
 # La funzione decript_message serve a decriptare i messaggi e necessita,
 # oltre alla chiave privata necessaria per decriptare i messaggi, della password
 # e del sale per decriptare la chiave privata.
-def decript_message_RSA(encrypted_message, password, encrypted_private_key, salt):
+def decrypt_message_RSA(encrypted_message, password, encrypted_private_key, salt):
     # Decifra la chiave privata usando password e sale
     decripted_private_key = _decrypt_private_key(encrypted_private_key, password, salt)
 
