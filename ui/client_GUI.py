@@ -1,10 +1,10 @@
+from datetime import datetime, timezone
 import sys
 import threading
 import tkinter as tk
 
 from model.client import Client
 from model.message import Message
-from ui.root_frame import RootFrame
 
 class ClientGUI:
 
@@ -52,7 +52,7 @@ class ClientGUI:
         if message_text and self.receiver:  
             result = self.client.send_message(self.receiver, message_text)
             if(result):
-                self.add_message(self.client.username, message_text)
+                self.add_message(self.client.username, message_text, str(datetime.now(timezone.utc))[:16])
                 self.entry_text.delete("1.0", tk.END)      
 
 
@@ -60,9 +60,10 @@ class ClientGUI:
         self.receiver = self.entry_recipient.get("1.0", tk.END).strip()
         self.client.update_chat(self.receiver)
         full_chat = self.client.get_full_chat(self.receiver)
-
-        print("P" + self.receiver + "P")
-
+        self.chat_frame.config(state=tk.NORMAL)
+        self.chat_frame.delete("1.0", tk.END)
+        self.chat_frame.config(state=tk.DISABLED)
+        
         for message in full_chat:
             self.add_message(message.username, message.text,time=message.time[:16])
 
