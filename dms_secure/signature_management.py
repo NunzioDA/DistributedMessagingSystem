@@ -14,7 +14,7 @@ from cryptography.exceptions import InvalidSignature
 ## criptati con la chiave privata indicata in private_key tramite 
 ## l'algoritmo ECDSA.
 def generate_signature_public_key(private_key):
-    private_key_bytes = private_key.encode()
+    private_key_bytes = private_key
     private_key = hashlib.sha256(private_key_bytes).hexdigest()
 
     private_key = ec.derive_private_key(
