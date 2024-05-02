@@ -25,7 +25,7 @@ class Client:
     def __init__(self, address, username, password):
         self.address = address
         self.username = username
-        self.password = password
+        self.password = password        
 
         base_data_path = "./data/client/" + str(self.address)
 
@@ -45,6 +45,53 @@ class Client:
         self.messages_queue = []
         self.messages_queue_lock = threading.Lock()
         self.message_notification_listeners = []
+
+    def start_client(self, join_threads = True):
+        self.running = True
+
+        if(not self._is_user_registered()):
+            self.register_user()
+        else:
+            if(not self.verify_password()):
+                raise Exception("Wrong password")
+            
+        self.init_paths()
+            
+        self._log("discovering network...")
+        try:
+            discover_result = self.network.discover()
+        except Exception as e:
+            self._log("some error occurred -> "+ str(e))
+            discover_result = False
+        if(discover_result != False):
+            self._log("network discovering complete succesfully -> " + str(discover_result) + " servers found")
+        else: 
+            self._log("couldn't find any server in the network.")
+
+        self._log("Notifing address to servers...")
+        self._notify_address()
+
+        self._log("Starting inbox listener...")
+        self._inbox_listener_thread = threading.Thread(target=self._inbox_listener)
+        self._inbox_listener_thread.start()
+
+        self._log("Starting queue handler...")
+        self.queue_handler_thread = threading.Thread(target=self._queue_handler)
+        self.queue_handler_thread.start()
+
+        if(join_threads):
+            self.queue_handler_thread.join()
+            self._inbox_listener_thread.join()
+
+    def init_paths(self):
+        if(not os.path.exists(self.INBOX_PATH)):
+            os.makedirs(self.INBOX_PATH)
+
+    def close(self):
+        self.running = False
+        self.server_socket.close()
+        send_and_get_response(self.address,["",""])
+        
 
     def add_message_notification_listener(self, listener):
         self.message_notification_listeners.append(listener)
@@ -86,46 +133,6 @@ class Client:
 
         return full_chat
     
-    def start_client(self, join_threads = True):
-
-        if(not self._is_user_registered()):
-            self.register_user()
-        else:
-            if(not self.verify_password()):
-                raise Exception("Wrong password")
-            
-        self.init_paths()
-            
-        self._log("discovering network...")
-        try:
-            discover_result = self.network.discover()
-        except Exception as e:
-            self._log("some error occurred -> "+ str(e))
-            discover_result = False
-        if(discover_result != False):
-            self._log("network discovering complete succesfully -> " + str(discover_result) + " servers found")
-        else: 
-            self._log("couldn't find any server in the network.")
-
-        self._log("Notifing address to servers...")
-        self._notify_address()
-
-        self._log("Starting inbox listener...")
-        self._inbox_listener_thread = threading.Thread(target=self._inbox_listener)
-        self._inbox_listener_thread.start()
-
-        self._log("Starting queue handler...")
-        self.queue_handler_thread = threading.Thread(target=self._queue_handler)
-        self.queue_handler_thread.start()
-
-        if(join_threads):
-            self.queue_handler_thread.join()
-            self._inbox_listener_thread.join()
-
-    def init_paths(self):
-        if(not os.path.exists(self.INBOX_PATH)):
-            os.makedirs(self.INBOX_PATH)
-
     def _is_user_registered(self):
         return os.path.exists(USER_INFO_PATH + self.username + ".json")
 
@@ -163,7 +170,7 @@ class Client:
 
         try:
             #Ciclo di gestione client parallela
-            while True:           
+            while self.running:           
                 self._log("Server listening for socket connections...")           
                 client_socket, client_address = self.server_socket.accept()
 
@@ -176,9 +183,11 @@ class Client:
 
         except Exception as e:
             self._log("Error:", e)
+        
+        self._log("socket listener terminated")     
 
     def _queue_handler(self):
-        while True:
+        while self.running:
             if(len(self.messages_queue)>0):
                 # Acquisisco il blocco sulla coda
                 self.messages_queue_lock.acquire()
@@ -194,6 +203,7 @@ class Client:
 
                 if(saved):
                     self.notify_message_notification_listeners(first_message)
+        self._log("Queue handler terminated")
 
     def _request_handler(self, client_socket):
         try:

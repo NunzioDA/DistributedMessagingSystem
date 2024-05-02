@@ -68,6 +68,7 @@ class ClientGUI:
 
     def on_closing(self):
         self.root.destroy()
+        self.client.close()
         sys.exit(0)
 
 
