@@ -31,8 +31,7 @@ class ClientGUI:
             self.login_window.destroy()  # Chiudi la finestra di accesso dopo il login
             self.create_root_frame()
         except Exception as e:
-            # self.lbl_login_status.config(text="Credenziali errate. Riprova.", fg="red")
-            print(e)
+            self.lbl_login_status.config(text="Credenziali errate. Riprova.", fg="red")
 
     def message_listener(self, message : Message):
         self.add_message(message.username, message.text, time=message.time[:16])
