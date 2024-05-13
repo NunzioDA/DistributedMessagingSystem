@@ -24,7 +24,7 @@ def request_network_discovery(elite_server_address, username, server_id):
         return result
 
     except socket.error as e:
-        print("c[elite server " + str(elite_server_address) + "]:", e)
+        print("ELITE SERVER API ERROR [elite server " + str(elite_server_address) + "]:", e)
         return False
     
 def enroll_server(elite_server_address, server_id, propagate = 1):
@@ -38,10 +38,8 @@ def enroll_server(elite_server_address, server_id, propagate = 1):
 
         data = receive_data(server_socket)      
 
-        print("Dati ricevuti dal server:", data.decode())
-
         server_socket.close()
         return data.decode() == "OK"
     except socket.error as e:
-        print("Connection failed[elite server " + str(elite_server_address) + "]:", e)
+        print("ELITE SERVER API ERROR Connection failed[elite server " + str(elite_server_address) + "]:", e)
         return False
