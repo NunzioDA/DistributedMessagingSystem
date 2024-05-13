@@ -245,8 +245,7 @@ class Client:
 
     def _notify_address(self):
         for server in self._my_inbox_servers():
-            print("notify ", server)
-            print(notify_client_address(server, self.username, self.password, self.address))
+            notify_client_address(server, self.username, self.password, self.address)
 
     def update_chat(self, receiver_username):
         receuver_servers = self._user_inbox_servers(receiver_username)
@@ -305,7 +304,7 @@ class Client:
         for server in self._user_inbox_servers(receiver_username):
             # Chiamata API
             response = send_message(server, message)
-            print(response)
+            
             if(response == b"OK"):
                 return True
         
