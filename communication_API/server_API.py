@@ -101,7 +101,7 @@ def notify_client_address(address, username, private_signature_key, sender_addre
 
         server_socket.close()
     except socket.error as e:
-        print("Connection failed["+str(address)+"]:", e)
+        print("SERVER API ERROR Connection failed["+str(address)+"]:", e)
         return False
     
     return response

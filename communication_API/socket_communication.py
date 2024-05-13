@@ -17,7 +17,7 @@ def send_and_get_response(address, command):
 
         server_socket.close()
     except socket.error as e:
-        print("Connection failed["+ str(address) +"]:", e)
+        print("SOCKET Connection failed["+ str(address) +"]:", e)
         return False
     
     return response
