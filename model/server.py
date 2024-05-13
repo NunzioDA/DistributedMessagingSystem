@@ -258,9 +258,10 @@ class Server(Client):
         
         with open(self.data_file_path + self.NETWORK_PATH + self.SERVERS_FILE, 'r') as servers_info:
             clusters = json.load(servers_info)
-        with open(self.data_file_path + self.NETWORK_PATH + self.SERVERS_FILE, 'w') as servers_info:
-            clusters[new_server_cluster].append(int(new_server))
-            json.dump(clusters, servers_info)
+        if(int(new_server) not in clusters[new_server_cluster]):
+            with open(self.data_file_path + self.NETWORK_PATH + self.SERVERS_FILE, 'w') as servers_info:
+                clusters[new_server_cluster].append(int(new_server))
+                json.dump(clusters, servers_info)
 
     def _send_message_request_handler(self, client_socket, sender_address, new_message : Message):        
         try:
@@ -349,7 +350,7 @@ class Server(Client):
         return history_hash, len(income_chat)
 
     def _check_history_and_update(self, message: Message, sender_address):
-        if(not self._check_history_hash(self, message, sender_address)):
+        if(not self._check_history_hash(message, sender_address)):
             self.message_manager._update_chat(
                 message.username, 
                 message.receiver_username, 
