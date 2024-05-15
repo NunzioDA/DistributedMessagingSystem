@@ -28,7 +28,7 @@ class ClientGUI:
 
             self.client.add_message_notification_listener(self.message_listener)
 
-            self.login_window.destroy()  # Chiudi la finestra di accesso dopo il login
+            self.login_window.destroy() 
             self.create_root_frame()
         except Exception as e:
             self.lbl_login_status.config(text="Credenziali errate. Riprova.", fg="red")
@@ -107,7 +107,7 @@ class ClientGUI:
     def create_root_frame(self):
         # Finestra principale (nascosta finché non si effettua l'accesso)
         self.root = tk.Tk()
-        self.root.title("App di Messaggistica")
+        self.root.title("DMS [" + str(self.my_address) + "]")
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         # self.root.iconbitmap(default='icon.ico')  # Inserisci il percorso del tuo file icon.ico       
 
