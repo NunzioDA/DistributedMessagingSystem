@@ -68,6 +68,8 @@ class MessageManager:
 
         most_uptodate_server_address = 0
         latest_version = 0
+        latest_hash = ""
+        found_something = False
 
         for server in servers:
             if(server != self.my_address):
@@ -75,12 +77,15 @@ class MessageManager:
                     response = get_version(server, sender, receiver, self.my_address)
                 except Exception as e:
                     response = "{\"hash\": 0, version: 0}"
-                response = json.loads(response)
+                    
+                if(response != False):
+                    response = json.loads(response)
 
 
-                if(response["version"]>latest_version):
-                    most_uptodate_server_address = server
-                    latest_version = response["version"]
+                    if(response["version"]>latest_version):
+                        most_uptodate_server_address = server
+                        latest_version = response["version"]
+                        latest_hash = response["hash"]
 
 
         try:
@@ -88,7 +93,7 @@ class MessageManager:
             if(most_uptodate_server_address != 0):
                 hash_chat, version = self._get_version(sender, receiver)
 
-                if(version < latest_version):
+                if(version < latest_version or (version == latest_version and hash_chat != latest_hash)):
                     income_chat = self.get_chat(sender,receiver)["income_chat"]
 
                     for index in range(len(income_chat), -1, -1):
@@ -131,9 +136,14 @@ class MessageManager:
                             for income_msg in income_update:
                                 update_message = self._create_message_from_chat(sender, receiver, income_msg)
                                 verify_message(update_message)# Controlli aggiuntivi per i messaggi
-                                self.verify_message(update_message)  
+                                self.verify_message(update_message)
+                                update_message.notifiable = False                                
                                 income_update_to_msgs.append(update_message)  
 
+                            
+                            if(len(income_update_to_msgs) > 0):
+                                income_update_to_msgs[-1].notify_update_listener = True
+                                found_something = True
 
                             income_chat[index:index] = income_update
 
@@ -142,8 +152,11 @@ class MessageManager:
                             messages_queue_lock.release()
                         else:
                             break
+                        
         except Exception as e:
             print("ERRORE:"+ str(e))
+
+        return found_something
 
     def _create_message_from_chat(self, sender, receiver, message):
         return Message(
