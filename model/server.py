@@ -19,7 +19,7 @@ from communication_API.elite_servers_API import *
 from communication_API.socket_communication import *
 from model.msg_manager import MessageManager
 
-class Server(Client):
+class Server:
       
     INBOX_PATH = "/inbox/"
     NETWORK_PATH = "/network/"
@@ -72,9 +72,11 @@ class Server(Client):
         self._log("starting new chat scanner...")
         self._start_new_chat_scanner()
 
+        self._log("starting socket listener...")
         self.socket_listener_thread = threading.Thread(target=self.socket_listener, args=(self.address,))
         self.socket_listener_thread.start()
 
+        self._log("starting queue handler...")
         self.queue_handler_thread = threading.Thread(target=self._queue_handler)
         self.queue_handler_thread.start()
 
@@ -91,7 +93,7 @@ class Server(Client):
                 address = user_info["address"]
                 send_message_to_client(address,new_message, self.address)
         except Exception as e:
-            print(e)
+            self._log(e)
      
     def propagate_message(self, message : Message):
         with open(self.data_file_path + self.NETWORK_PATH + self.SERVERS_FILE, 'r') as servers_file:
@@ -99,7 +101,7 @@ class Server(Client):
 
             servers_in_cluster = clusters[self._my_cluster_id()]
 
-            history_hash, version = self._get_version(message.receiver_username, message.username)
+            history_hash, version = self.message_manager._get_version(message.username, message.receiver_username)
 
             message_copy = Message(
                 message.username,
@@ -116,9 +118,33 @@ class Server(Client):
             )
 
 
+            latest_version = 0
+            latest_version_hash = 0
+
             for address in servers_in_cluster:
-                if(address != self.address):                    
-                    threading.Thread(target=send_message, args=(address, message_copy, self.address)).start()
+                if(address != self.address):               
+                    result = send_message(address, message_copy, self.address) 
+                    if(result != False and b"OK" in result):
+                        splitted_result = result.decode().split(";")
+                        server_version = int(splitted_result[1])
+                        server_hash = splitted_result[2]
+                        if(server_version > latest_version):
+                            latest_version = server_version
+                            latest_version_hash = server_hash
+
+            my_chat_hash, my_chat_version = self.message_manager._get_version(message.username, message.receiver_username)            
+
+            if((latest_version_hash != my_chat_hash and latest_version == my_chat_version) or latest_version > my_chat_version):
+                self._log("Another server has a more recent version of [" + message.username + " -> " + message.receiver_username +"] chat: starting chat update")
+
+                self.message_manager._update_chat(
+                    message.username, 
+                    message.receiver_username, 
+                    self._my_cluster(),
+                    self.messages_queue_lock,
+                    self.messages_queue,
+                    verify_message=self._verify_user_belong_to_cluster                
+                )
 
     def _start_enrollment_procedure(self):
         with open(self.KNOWN_SERVER_FILE, "r") as known_servers_f:
@@ -231,7 +257,7 @@ class Server(Client):
             elif(command == VERSION_MSG):
                 chat_sender = parameters.pop(0)
                 chat_receiver = parameters.pop(0)
-                chat_hash, version = self._get_version(chat_sender, chat_receiver)
+                chat_hash, version = self.message_manager._get_version(chat_sender, chat_receiver)
                 send_all(client_socket,json.dumps({"hash":chat_hash, "version":version}).encode())
             elif(command == SOCIAL_TREE_MSG):
                 social_tree = self._get_social_tree()
@@ -275,18 +301,19 @@ class Server(Client):
                 os.mkdir(self.data_file_path +self.INBOX_PATH + new_message.receiver_username)
 
             if(new_message.urgent == 1):
-                self.propagate_message(new_message)
+                threading.Thread(target=self.propagate_message, args=(new_message,)).start()
                 self._forward_message_to_user(new_message)
             
 
             # Blocco la coda dei messaggi e aggiungo il messaggio appena ricevuto
             self.messages_queue_lock.acquire()
 
+            chat_hash, chat_version = self.message_manager._get_version(new_message.username, new_message.receiver_username)
             self.messages_queue.append(new_message)
 
             self.messages_queue_lock.release()
 
-            send_all(client_socket,b"OK")
+            send_all(client_socket, ("OK;" + str(chat_version) + ";" + chat_hash).encode())
         except Exception as e:
             send_all(client_socket,str(e).encode())
 
@@ -343,14 +370,9 @@ class Server(Client):
         except Exception as e:
             send_all(client_socket,str(e).encode())
 
-    def _get_version(self, sender, receiver):
-        income_chat = self.message_manager.get_chat(sender, receiver)["income_chat"]
-
-        history_hash = hashlib.sha256(str(income_chat).encode()).hexdigest()
-        return history_hash, len(income_chat)
-
     def _check_history_and_update(self, message: Message, sender_address):
-        if(not self._check_history_hash(message, sender_address)):
+        if(not self._consistent_history_hash(message, sender_address)):
+            self._log("Received a more recent [" + message.username + " -> " + message.receiver_username +"] chat: starting chat update")
             self.message_manager._update_chat(
                 message.username, 
                 message.receiver_username, 
@@ -360,27 +382,17 @@ class Server(Client):
                 verify_message=self._verify_user_belong_to_cluster                
             )
 
-    def _check_history_hash(self, message : Message, sender_address):
-        income_chat = self.message_manager.get_chat(message.username, message.receiver_username)["income_chat"]
-
-        end_index = len(income_chat)
-
-        if(end_index>0):
-            message_time = datetime.strptime(message.time,"%Y-%m-%d %H:%M:%S.%f%z")
-
-            for i in range(len(income_chat) - 1, -1, -1):
-                old_message = income_chat[i]
-                old_message_time = datetime.strptime(old_message["date_time"],"%Y-%m-%d %H:%M:%S.%f%z")
-
-                if(old_message_time < message_time):
-                        end_index = i + 1
-                        break
+    def _consistent_history_hash(self, message : Message, sender_address):
+        try:
+            income_chat = self.message_manager.get_chat(message.username, message.receiver_username)["income_chat"]
+        except Exception:
+            income_chat = []
 
         
-        history_hash = hashlib.sha256(str(income_chat[:end_index]).encode()).hexdigest()
-        version = len(income_chat[:end_index])
+        history_hash = hashlib.sha256(str(income_chat).encode()).hexdigest()
+        version = len(income_chat)
 
-        return message.history_hash != history_hash and message.version > version
+        return not((message.history_hash != history_hash and message.version == version) or message.version > version)
 
 
     def _create_message_from_chat(self, sender, receiver, message):
@@ -409,7 +421,11 @@ class Server(Client):
             message_start_time >= message_end_time):
                 return []
 
-        income_chat = self.message_manager.get_chat(message_end.username, message_end.receiver_username)["income_chat"]
+        
+        try:
+            income_chat = self.message_manager.get_chat(message_end.username, message_end.receiver_username)["income_chat"]
+        except Exception:
+            income_chat = []
 
         range_chat = []        
 
@@ -439,33 +455,30 @@ class Server(Client):
         social_tree = {}
 
         for user in receivers:
-            sender = os.listdir(self.data_file_path + self.INBOX_PATH + user+"/")
-            sender =  [x.split('.')[0] for x in sender]
-            social_tree[user] = sender
+            senders = os.listdir(self.data_file_path + self.INBOX_PATH + user+"/")
+            senders =  [x.split('.')[0] for x in senders] # Rimozione .json 
+                            
+            try:
+                senders.remove("info")
+            except Exception as e:
+                pass
+
+
+            social_tree[user] = senders
         return social_tree
 
-    def _my_cluster_id(self):
-        with open(self.data_file_path + self.NETWORK_PATH + self.SERVERS_FILE, 'r') as servers_info:
-            servers = json.load(servers_info)
-            
-            cluster = -1
-
-            for index, array in enumerate(servers):
-                if self.address in array:
-                    cluster = index
-        return cluster
+    def _my_cluster_id(self):            
+        return hash_to_range(str(self.address).encode(), self.clusters_number())
     
     def _my_cluster(self):
         with open(self.data_file_path + self.NETWORK_PATH + self.SERVERS_FILE, 'r') as servers_info:
-            servers = json.load(servers_info)
+            clusters = json.load(servers_info)
         
-            cluster = None
-
-            for cluster in servers:
-                if self.address in cluster:
-                    break
+            cluster_id = hash_to_range(str(self.address).encode(), len(clusters))
                 
-        return cluster
+        my_cluster = clusters[cluster_id]
+        my_cluster.remove(self.address)
+        return my_cluster
     
     def clusters_number(self):
         with open(self.data_file_path + self.NETWORK_PATH + self.SERVERS_FILE, 'r') as servers_info:
