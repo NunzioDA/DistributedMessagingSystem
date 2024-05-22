@@ -45,6 +45,7 @@ class Client:
         self.messages_queue = []
         self.messages_queue_lock = threading.Lock()
         self.message_notification_listeners = []
+        self.chat_update_notification_listeners = []
 
     def start_client(self, join_threads = True):
         self.running = True
@@ -100,6 +101,13 @@ class Client:
         for listener in self.message_notification_listeners:
             listener(self.decrypt_message(message))
 
+    def add_chat_update_notification_listener(self, listener):
+        self.chat_update_notification_listeners.append(listener)
+
+    def notify_chat_update_notification_listeners(self):
+        for listener in self.chat_update_notification_listeners:
+            listener()
+
     def decrypt_message(self, message : Message):
         if(message.receiver_username == self.username):
             _key = base64.b64decode(message.receiver_key)
@@ -130,7 +138,7 @@ class Client:
 
         full_chat = chat_sent + chat_received
         full_chat.sort(key=lambda message: datetime.strptime(message.time,"%Y-%m-%d %H:%M:%S.%f%z"))
-
+        
         return full_chat
     
     def _is_user_registered(self):
@@ -201,8 +209,12 @@ class Client:
                 # Salvo il messaggio
                 saved = self.message_manager.save_message(first_message)
 
-                if(saved):
+                if(saved and first_message.username != self.username and first_message.notifiable):
                     self.notify_message_notification_listeners(first_message)
+
+                if(first_message.notify_update_listener):
+                    self.notify_chat_update_notification_listeners()
+                    
         self._log("Queue handler terminated")
 
     def _request_handler(self, client_socket):
@@ -248,28 +260,30 @@ class Client:
             notify_client_address(server, self.username, self.password, self.address)
 
     def update_chat(self, receiver_username):
-        receuver_servers = self._user_inbox_servers(receiver_username)
-        my_servers = self._user_inbox_servers(self.username)
+        receiver_servers = self._user_inbox_servers(receiver_username)
+        my_servers = self._user_inbox_servers(self.username)            
 
-        # Aggiorna messaggi inviati all'utente
-        self.message_manager._update_chat(
+        # Aggiorna messaggi inviati dall'utente
+        result_sent = self.message_manager._update_chat(
             self.username, 
             receiver_username, 
-            receuver_servers, 
+            receiver_servers, 
             self.messages_queue_lock, 
             self.messages_queue
         )
 
-        # Aggiorna messaggi inviati all'utente
-        self.message_manager._update_chat(
+        # Aggiorna messaggi ricevuti dall'utente
+        result_received = self.message_manager._update_chat(
             receiver_username, 
             self.username, 
             my_servers, 
             self.messages_queue_lock, 
-            self.messages_queue
+            self.messages_queue,
         )
 
-
+        if(not result_sent and not result_received):
+            self.notify_chat_update_notification_listeners()
+            
     def send_message(self, receiver_username, text):      
 
         chat_key = generate_aes_key()
@@ -304,8 +318,8 @@ class Client:
         for server in self._user_inbox_servers(receiver_username):
             # Chiamata API
             response = send_message(server, message)
-            
-            if(response == b"OK"):
+            print(response)
+            if(response != False and b"OK" in response):
                 return True
         
         return False
