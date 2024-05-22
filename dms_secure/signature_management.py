@@ -15,7 +15,7 @@ from cryptography.exceptions import InvalidSignature
 ## l'algoritmo ECDSA.
 def generate_signature_public_key(private_key):
     private_key_bytes = private_key
-    private_key = hashlib.sha256(private_key_bytes).hexdigest()
+    private_key_bytes = hashlib.sha256(private_key_bytes).digest()
 
     private_key = ec.derive_private_key(
         int.from_bytes(private_key_bytes, byteorder='big'),
@@ -37,7 +37,7 @@ def generate_signature_public_key(private_key):
 # Funzione per firmare un messaggio
 def sign_message(private_key, message):
     private_key_bytes = private_key.encode()
-    private_key = hashlib.sha256(private_key_bytes).hexdigest()
+    private_key_bytes = hashlib.sha256(private_key_bytes).digest()
 
     derived_private_key = ec.derive_private_key(
         int.from_bytes(private_key_bytes, byteorder='big'),
