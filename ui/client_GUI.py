@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 import sys
 import threading
+import time
 import tkinter as tk
 
 from model.client import Client
@@ -25,12 +26,13 @@ class ClientGUI:
             self.client = Client(self.my_address,username_input, password_input)
             self.client.start_client(False)
             
-
             self.client.add_message_notification_listener(self.message_listener)
+            self.client.add_chat_update_notification_listener(self.on_update_complete)
 
             self.login_window.destroy() 
             self.create_root_frame()
         except Exception as e:
+            print(e)
             self.lbl_login_status.config(text="Credenziali errate. Riprova.", fg="red")
 
     def message_listener(self, message : Message):
@@ -57,12 +59,19 @@ class ClientGUI:
 
     def set_up_chat(self):
         self.receiver = self.entry_recipient.get("1.0", tk.END).strip()
-        self.client.update_chat(self.receiver)
-        full_chat = self.client.get_full_chat(self.receiver)
         self.chat_frame.config(state=tk.NORMAL)
         self.chat_frame.delete("1.0", tk.END)
         self.chat_frame.config(state=tk.DISABLED)
+        self.add_message("", "Caricamento...",time="")
+
+        self.client.update_chat(self.receiver)
         
+    def on_update_complete(self):
+        full_chat = self.client.get_full_chat(self.receiver)        
+        self.chat_frame.config(state=tk.NORMAL)
+        self.chat_frame.delete("1.0", tk.END)
+        self.chat_frame.config(state=tk.DISABLED)
+
         for message in full_chat:
             self.add_message(message.username, message.text,time=message.time[:16])
 
