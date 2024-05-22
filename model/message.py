@@ -16,6 +16,8 @@ class Message:
             urgent = 1,
             history_hash = "",
             version = 0,
+            notifiable=True,
+            notify_update_listener=False
         ):
         self.username = username
         self.receiver_username = receiver_username
@@ -28,6 +30,8 @@ class Message:
         self.time = time
         self.history_hash = history_hash
         self.version = version
+        self.notifiable = notifiable
+        self.notify_update_listener = notify_update_listener
 
     def to_json(self):
         return json.dumps({
