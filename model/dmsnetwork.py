@@ -19,6 +19,10 @@ class DMSNetwork:
         if(not os.path.exists(self.NETWOWK_PATH)):
             os.makedirs(self.NETWOWK_PATH)
 
+        if(not os.path.exists(self.NETWOWK_FILE_PATH)):
+            with open(self.NETWOWK_FILE_PATH, 'w') as server_file:
+                json.dump([[],[],[]], server_file)
+
     def discover(self):        
 
         with open('./res/known_servers.json', 'r') as known_servers_file:
