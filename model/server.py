@@ -31,6 +31,7 @@ class Server:
     def __init__(self, address, username):
         self.address = address
         self.data_file_path = "./data/servers/" + str(self.address)
+        self.init_paths() 
 
         self.network = DMSNetwork(username,address, self.data_file_path, True)
         self.message_manager = MessageManager(
@@ -42,8 +43,7 @@ class Server:
         # Definisco la coda di messaggi
         self.messages_queue = []
         self.messages_queue_lock = threading.Lock()
-
-        self.init_paths()        
+               
         
     def init_paths(self):
         if(not os.path.exists(self.data_file_path + self.INBOX_PATH)):
@@ -51,7 +51,7 @@ class Server:
 
 
     def start_server(self):
-
+            
         self._log("starting enrollment procedure...")
         self._start_enrollment_procedure()
         self._log("enrollment procedure complete")
@@ -119,7 +119,7 @@ class Server:
 
 
             latest_version = 0
-            latest_version_hash = 0
+            latest_version_hash = ""
 
             for address in servers_in_cluster:
                 if(address != self.address):               
@@ -134,7 +134,7 @@ class Server:
 
             my_chat_hash, my_chat_version = self.message_manager._get_version(message.username, message.receiver_username)            
 
-            if((latest_version_hash != my_chat_hash and latest_version == my_chat_version) or latest_version > my_chat_version):
+            if(latest_version_hash != "" and (latest_version_hash != my_chat_hash and latest_version == my_chat_version) or latest_version > my_chat_version):
                 self._log("Another server has a more recent version of [" + message.username + " -> " + message.receiver_username +"] chat: starting chat update")
 
                 self.message_manager._update_chat(
@@ -471,9 +471,8 @@ class Server:
         return hash_to_range(str(self.address).encode(), self.clusters_number())
     
     def _my_cluster(self):
-        with open(self.data_file_path + self.NETWORK_PATH + self.SERVERS_FILE, 'r') as servers_info:
+        with open(self.data_file_path + self.NETWORK_PATH + self.SERVERS_FILE, 'r') as servers_info:        
             clusters = json.load(servers_info)
-        
             cluster_id = hash_to_range(str(self.address).encode(), len(clusters))
                 
         my_cluster = clusters[cluster_id]
