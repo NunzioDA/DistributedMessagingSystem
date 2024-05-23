@@ -13,8 +13,11 @@ class ClientGUI:
         self.my_address = my_address
         self.message_queue = []
         self.message_queue_lock = threading.Lock()
-        self.create_login_frame()
-        
+
+        self.client = None
+        self.login_window = None
+        self.root = None
+        self.create_login_frame()   
         
 
     def login(self):
@@ -30,6 +33,7 @@ class ClientGUI:
             self.client.add_chat_update_notification_listener(self.on_update_complete)
 
             self.login_window.destroy() 
+            self.login_window = None
             self.create_root_frame()
         except Exception as e:
             print(e)
@@ -76,10 +80,16 @@ class ClientGUI:
             self.add_message(message.username, message.text,time=message.time[:16])
 
     def on_closing(self):
-        self.root.destroy()
-        self.client.close()
-        sys.exit(0)
+        if(self.root != None):
+            self.root.destroy()
 
+        if(self.login_window != None):
+            self.login_window.destroy()
+
+        if(self.client != None):
+            self.client.close()
+
+        sys.exit(0)
 
 
     def create_login_frame(self):
@@ -113,41 +123,44 @@ class ClientGUI:
 
         self.login_window.mainloop()
 
+
     def create_root_frame(self):
-        # Finestra principale (nascosta finché non si effettua l'accesso)
         self.root = tk.Tk()
-        self.root.title("DMS [" + str(self.my_address) + "]")
+        self.root.title("DMS " + self.client.username + " [" + str(self.my_address) + "]")
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
-        # self.root.iconbitmap(default='icon.ico')  # Inserisci il percorso del tuo file icon.ico       
+        # self.root.iconbitmap(default='icon.ico')      
 
-
+        # Campo chat
         self.chat_frame = tk.Text(self.root, height=20, width=50, state=tk.DISABLED)
         self.chat_frame.pack(pady=10)
 
+        # Etichetta Destinatario
         label_recipient = tk.Label(self.root, text="Destinatario", anchor="w", font=("Arial", 10, "bold"))
         label_recipient.pack()
 
-
+        # Frame destinatario
         receiver_frame = tk.Frame(self.root)
         receiver_frame.pack()
 
+        # Campo destinatario
         self.entry_recipient = tk.Text(receiver_frame, height=1, width=40)  
         self.entry_recipient.pack(pady=5, side=tk.LEFT)
 
-        # Aggiungi un pulsante a destra di entry_recipient
+        # Pulsante per accettare destinatario
         btn_ok = tk.Button(receiver_frame, text="OK", command=self.set_up_chat)
         btn_ok.pack(side=tk.RIGHT)       
 
+        # Frame messaggio
         entry_text_frame = tk.Frame(self.root)
         entry_text_frame.pack()
 
-        # Sposta il pulsante btn_send a destra di entry_text
+        # Pulsante invio messaggio
         btn_send = tk.Button(entry_text_frame, text="Invia", command=self.send_message)
         btn_send.pack(side=tk.RIGHT)
 
-        self.entry_text = tk.Text(entry_text_frame, height=3, width=40)
-        self.entry_text.pack(pady=5,side=tk.LEFT)
 
-        
+        # Campo inserimento messaggio
+        self.entry_text = tk.Text(entry_text_frame, height=3, width=40)
+        self.entry_text.pack(pady=5,side=tk.LEFT)        
         
         self.root.mainloop()
