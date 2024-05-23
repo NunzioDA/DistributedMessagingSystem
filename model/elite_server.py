@@ -65,10 +65,12 @@ class EliteServer:
             if(command == DISCOVERY_MSG):
                 username = parameters[1]
                 server_id = parameters[2]
+                self._log("Network discovery request [" + server_id + "]")
                 self.discover_request(client_socket, username, server_id)
             elif(command == ENROLL_MSG):
                 server_id = parameters[1]
                 propagate = parameters[2]
+                self._log("Enroll request [" + server_id + "]")
                 self.enroll_server(client_socket, server_id, propagate)
                 
             client_socket.close()
