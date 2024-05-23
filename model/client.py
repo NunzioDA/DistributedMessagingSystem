@@ -318,7 +318,7 @@ class Client:
         for server in self._user_inbox_servers(receiver_username):
             # Chiamata API
             response = send_message(server, message)
-            print(response)
+
             if(response != False and b"OK" in response):
                 return True
         
