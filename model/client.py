@@ -195,27 +195,29 @@ class Client:
         self._log("socket listener terminated")     
 
     def _queue_handler(self):
-        while self.running:
-            if(len(self.messages_queue)>0):
-                # Acquisisco il blocco sulla coda
-                self.messages_queue_lock.acquire()
+        if(len(self.messages_queue)>0):
+            # Acquisisco il blocco sulla coda
+            self.messages_queue_lock.acquire()
 
-                # Eseguo le operazioni sulla coda
-                first_message = self.messages_queue.pop(0)
+            # Eseguo le operazioni sulla coda
+            first_message = self.messages_queue.pop(0)
 
-                # Rilascio il blocco sulla coda
-                self.messages_queue_lock.release()
+            # Rilascio il blocco sulla coda
+            self.messages_queue_lock.release()
 
-                # Salvo il messaggio
-                saved = self.message_manager.save_message(first_message)
+            # Salvo il messaggio
+            saved = self.message_manager.save_message(first_message)
 
-                if(saved and first_message.username != self.username and first_message.notifiable):
-                    self.notify_message_notification_listeners(first_message)
+            if(saved and first_message.username != self.username and first_message.notifiable):
+                self.notify_message_notification_listeners(first_message)
 
-                if(first_message.notify_update_listener):
-                    self.notify_chat_update_notification_listeners()
-                    
-        self._log("Queue handler terminated")
+            if(first_message.notify_update_listener):
+                self.notify_chat_update_notification_listeners()
+        
+        if(self.running):
+            threading.Thread(target=self._queue_handler).start()
+        else:    
+            self._log("Queue handler terminated")
 
     def _request_handler(self, client_socket):
         try:
