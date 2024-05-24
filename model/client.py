@@ -177,14 +177,16 @@ class Client:
         self.server_socket.listen(1)
 
         try:
-            #Ciclo di gestione client parallela
-            while self.running:           
-                self._log("Server listening for socket connections...")           
-                client_socket, client_address = self.server_socket.accept()
+            #Ciclo di gestione client parallela       
+            self._log("Server listening for socket connections...")           
+            client_socket, client_address = self.server_socket.accept()
 
-                # Avvio thread di gestione delle richieste
-                handler_thread = threading.Thread(target=self._request_handler, args=(client_socket,))
-                handler_thread.start()
+            # Avvio thread di gestione delle richieste
+            handler_thread = threading.Thread(target=self._request_handler, args=(client_socket,))
+            handler_thread.start()
+
+            if(self.running):
+                threading.Thread(target=self._inbox_listener).start()
         except KeyboardInterrupt:
             self._log("Interruzione da tastiera. Chiudo il socket...")
             self.on_close()          
@@ -340,18 +342,13 @@ class Client:
     def connection_to_mybox():
         raise NotImplementedError("Not implemented")
     
-    def _my_inbox_id(self):
-        with open(self.network_manager.NETWOWK_FILE_PATH, 'r') as servers_info:
-            return hash_to_range(self.username, len(json.load(servers_info)))
-
     def _my_inbox_servers(self):
         return self._user_inbox_servers(self.username)
         
     def _user_inbox_servers(self, username):
-        with open(self.network_manager.NETWOWK_FILE_PATH, 'r') as servers_info:
-            servers = json.load(servers_info)      
-            user_inbox_id = hash_to_range(username.encode(), len(servers))
-            return servers[user_inbox_id]
+        servers = self.network_manager.get_network()  
+        user_inbox_id = hash_to_range(username.encode(), len(servers))
+        return servers[user_inbox_id]
     
     def _log(self, log):
         print("CLIENT [" + str(self.address) + "]: " + str(log))
