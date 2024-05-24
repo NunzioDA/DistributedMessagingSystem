@@ -17,7 +17,8 @@ class Message:
             history_hash = "",
             version = 0,
             notifiable=True,
-            notify_update_listener=False
+            notify_update_listener=False,
+            already_forwarded = False
         ):
         self.username = username
         self.receiver_username = receiver_username
@@ -32,6 +33,7 @@ class Message:
         self.version = version
         self.notifiable = notifiable
         self.notify_update_listener = notify_update_listener
+        self.already_forwarded = already_forwarded
 
     def to_json(self):
         return json.dumps({
@@ -45,7 +47,8 @@ class Message:
             "key_signature" : self.key_signature,
             "urgent" : self.urgent,
             "history_hash" : self.history_hash,
-            "version" : self.version
+            "version" : self.version,
+            "already_forwarded" : self.already_forwarded
         })
     
     @classmethod
@@ -62,5 +65,8 @@ class Message:
             json_data["key_signature"],
             json_data["urgent"],
             json_data["history_hash"],
-            json_data["version"]
+            json_data["version"],
+            True,
+            False,
+            json_data["already_forwarded"]
         )
