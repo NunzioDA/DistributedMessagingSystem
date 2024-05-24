@@ -199,8 +199,9 @@ class Server:
                     if(not self._user_inbox_exists(receiver)):
                         os.makedirs(self.data_file_path + self.INBOX_PATH+receiver)
 
-                    for sender in ["senders"]:
+                    for sender in social_tree[receiver]["senders"]:
                         if(not self._user_chat_exists(receiver, sender)):
+                            self._log("New chat found [" + sender + " -> " + receiver + "]")
                             chat_update = get_chat_range(server, None, Message(sender, receiver,"","",str(datetime.now(timezone.utc))), self.address)
                             chat_update = json.loads(chat_update)
                             
