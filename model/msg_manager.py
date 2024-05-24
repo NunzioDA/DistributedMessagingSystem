@@ -130,7 +130,7 @@ class MessageManager:
                                     urgent=0
                                 )
 
-                            income_update = json.loads(get_chat_range(int(most_uptodate_server_address), start_message, end_message))
+                            income_update = json.loads(get_chat_range(int(most_uptodate_server_address), start_message, end_message, self.my_address))
                             income_update_to_msgs = []
 
                             for income_msg in income_update:

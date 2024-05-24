@@ -262,25 +262,30 @@ class Server:
             if(command == SEND_MSG):
                 message_json = parameters.pop(0)
                 new_message = Message.from_json(message_json)
+                self._log("Send message request [" + str(sender_address) + "]")
                 self._send_message_request_handler(client_socket, sender_address, new_message)
 
             elif(command == RANGE_MSG):
                 message_start_json = parameters.pop(0)
                 message_end_json = parameters.pop(0)
-                
+                self._log("Chat range request [" + str(sender_address) + "]")
                 self._range_request_handler(client_socket, sender_address, message_start_json, message_end_json)
             elif(command == VERSION_MSG):
                 chat_sender = parameters.pop(0)
                 chat_receiver = parameters.pop(0)
                 chat_hash, version = self.message_manager._get_version(chat_sender, chat_receiver)
+                self._log("Chat version request [" + str(sender_address) + "] : " + chat_sender + " -> " + chat_receiver)
                 send_all(client_socket,json.dumps({"hash":chat_hash, "version":version}).encode())
             elif(command == SOCIAL_TREE_MSG):
                 social_tree = self._get_social_tree()
+                self._log("Social tree request [" + str(sender_address) + "]")
                 send_all(client_socket,json.dumps(social_tree).encode())
-            elif(command == NOTIFY_ADDRESS_MSG):     
+            elif(command == NOTIFY_ADDRESS_MSG):   
+                self._log("Address notification [" + str(sender_address) + "]")  
                 self._handle_address_notification(client_socket, sender_address)
             elif(command == NEW_SERVER_MSG):
                 new_server = parameters.pop(0)
+                self._log("New server in cluster found [" + str(new_server) + "]")  
                 self._new_server_in_cluster_handler(client_socket, new_server)
 
             client_socket.close()
