@@ -24,7 +24,6 @@ class Server:
     INBOX_PATH = "/inbox/"
     NETWORK_PATH = "/network/"
 
-    SERVERS_FILE = "servers.json"
     KNOWN_SERVER_FILE = "./res/known_servers.json"
     INFO_FILE = "info.json"
 
@@ -33,6 +32,7 @@ class Server:
         self.data_file_path = "./data/servers/" + str(self.address)
         self.init_paths() 
 
+        
         self.network = DMSNetwork(username,address, self.data_file_path, True)
         self.message_manager = MessageManager(
             self.data_file_path + self.INBOX_PATH,
@@ -43,6 +43,7 @@ class Server:
         # Definisco la coda di messaggi
         self.messages_queue = []
         self.messages_queue_lock = threading.Lock()
+        
                
         
     def init_paths(self):
@@ -85,66 +86,77 @@ class Server:
         self.queue_handler_thread.join()
         self.socket_listener_thread.join()
 
+    def save_user_address(self, user, address):
+        with open(self.data_file_path + self.INBOX_PATH + user + "/" + self.INFO_FILE, "w") as user_info_file:
+            json.dump({"address":address},user_info_file)
+
+    def get_user_address(self, user):
+        with open(self.data_file_path + self.INBOX_PATH + user+"/"+self.INFO_FILE, "r") as user_info_file:
+            user_info = json.load(user_info_file)
+            address = user_info["address"]
+        
+        return address
 
     def _forward_message_to_user(self, new_message : Message):
         try:
-            with open(self.data_file_path + self.INBOX_PATH + new_message.receiver_username+"/"+self.INFO_FILE, "r") as user_info_file:
-                user_info = json.load(user_info_file)
-                address = user_info["address"]
-                send_message_to_client(address,new_message, self.address)
+            address = self.get_user_address(new_message.receiver_username)
+            result = send_message_to_client(address,new_message, self.address)
+            if(result != False):
+                return True
         except Exception as e:
             self._log(e)
+        
+        return False
      
     def propagate_message(self, message : Message):
-        with open(self.data_file_path + self.NETWORK_PATH + self.SERVERS_FILE, 'r') as servers_file:
-            clusters = json.load(servers_file)
+        servers_in_cluster = self.network.my_cluster()
 
-            servers_in_cluster = clusters[self._my_cluster_id()]
+        history_hash, version = self.message_manager._get_version(message.username, message.receiver_username)
 
-            history_hash, version = self.message_manager._get_version(message.username, message.receiver_username)
+        message_copy = Message(
+            message.username,
+            message.receiver_username,
+            message.signature,
+            message.text,
+            message.time,
+            message.receiver_key,
+            message.sender_key,
+            message.key_signature,
+            0,
+            history_hash,
+            version,
+            already_forwarded=message.already_forwarded
+        )
 
-            message_copy = Message(
-                message.username,
-                message.receiver_username,
-                message.signature,
-                message.text,
-                message.time,
-                message.receiver_key,
-                message.sender_key,
-                message.key_signature,
-                0,
-                history_hash,
-                version
+
+        latest_version = 0
+        latest_version_hash = ""
+
+        for address in servers_in_cluster:
+            if(address != self.address):               
+                result = send_message(address, message_copy, self.address) 
+                if(result != False and b"OK" in result):
+                    message_copy.already_forwarded = True
+                    splitted_result = result.decode().split(";")
+                    server_version = int(splitted_result[1])
+                    server_hash = splitted_result[2]
+                    if(server_version > latest_version):
+                        latest_version = server_version
+                        latest_version_hash = server_hash
+
+        my_chat_hash, my_chat_version = self.message_manager._get_version(message.username, message.receiver_username)            
+
+        if(latest_version_hash != "" and (latest_version_hash != my_chat_hash and latest_version == my_chat_version) or latest_version > my_chat_version):
+            self._log("Another server has a more recent version of [" + message.username + " -> " + message.receiver_username +"] chat: starting chat update")
+
+            self.message_manager._update_chat(
+                message.username, 
+                message.receiver_username, 
+                self.network.my_cluster(),
+                self.messages_queue_lock,
+                self.messages_queue,
+                verify_message=self._verify_user_belong_to_cluster                
             )
-
-
-            latest_version = 0
-            latest_version_hash = ""
-
-            for address in servers_in_cluster:
-                if(address != self.address):               
-                    result = send_message(address, message_copy, self.address) 
-                    if(result != False and b"OK" in result):
-                        splitted_result = result.decode().split(";")
-                        server_version = int(splitted_result[1])
-                        server_hash = splitted_result[2]
-                        if(server_version > latest_version):
-                            latest_version = server_version
-                            latest_version_hash = server_hash
-
-            my_chat_hash, my_chat_version = self.message_manager._get_version(message.username, message.receiver_username)            
-
-            if(latest_version_hash != "" and (latest_version_hash != my_chat_hash and latest_version == my_chat_version) or latest_version > my_chat_version):
-                self._log("Another server has a more recent version of [" + message.username + " -> " + message.receiver_username +"] chat: starting chat update")
-
-                self.message_manager._update_chat(
-                    message.username, 
-                    message.receiver_username, 
-                    self._my_cluster(),
-                    self.messages_queue_lock,
-                    self.messages_queue,
-                    verify_message=self._verify_user_belong_to_cluster                
-                )
 
     def _start_enrollment_procedure(self):
         with open(self.KNOWN_SERVER_FILE, "r") as known_servers_f:
@@ -155,7 +167,6 @@ class Server:
 
     def _sort_queue(self):
         pass
-        # self.messages_queue.sort(key=lambda x: x.urgent, reverse=True)
 
     def _queue_handler(self):
         while True:
@@ -177,7 +188,7 @@ class Server:
         threading.Thread(target=self._new_chat_scanner).start()
 
     def _new_chat_scanner(self):
-        cluster = self._my_cluster()
+        cluster = self.network.my_cluster()
 
         for server in cluster:
             social_tree = get_social_tree(server,self.address)
@@ -188,7 +199,7 @@ class Server:
                     if(not self._user_inbox_exists(receiver)):
                         os.makedirs(self.data_file_path + self.INBOX_PATH+receiver)
 
-                    for sender in social_tree[receiver]:
+                    for sender in ["senders"]:
                         if(not self._user_chat_exists(receiver, sender)):
                             chat_update = get_chat_range(server, None, Message(sender, receiver,"","",str(datetime.now(timezone.utc))), self.address)
                             chat_update = json.loads(chat_update)
@@ -198,7 +209,10 @@ class Server:
                             self.messages_queue_lock.acquire()
                             self.messages_queue[0:0] = new_messages_list
                             self.messages_queue_lock.release()
-                            
+
+                    if(not os.path.exists(self.data_file_path + self.INBOX_PATH + receiver + "/" + self.INFO_FILE) and 
+                       social_tree[receiver]["address"] != "Unknown"):
+                        self.save_user_address(receiver, social_tree[receiver]["address"])
 
     def _user_inbox_exists(self, user):
         return os.path.exists(self.data_file_path + self.INBOX_PATH+user)
@@ -274,20 +288,7 @@ class Server:
 
 
     def _new_server_in_cluster_handler(self, client_socket, new_server):
-
-        new_server_cluster = hash_to_range(str(new_server).encode(), self.clusters_number())
-        my_cluster = hash_to_range(str(self.address).encode(), self.clusters_number())
-
-        if(new_server_cluster != my_cluster):
-            send_all(client_socket, b"Not in the same cluster")
-            return
-        
-        with open(self.data_file_path + self.NETWORK_PATH + self.SERVERS_FILE, 'r') as servers_info:
-            clusters = json.load(servers_info)
-        if(int(new_server) not in clusters[new_server_cluster]):
-            with open(self.data_file_path + self.NETWORK_PATH + self.SERVERS_FILE, 'w') as servers_info:
-                clusters[new_server_cluster].append(int(new_server))
-                json.dump(clusters, servers_info)
+        self.network.add_server_to_network(int(new_server))
 
     def _send_message_request_handler(self, client_socket, sender_address, new_message : Message):        
         try:
@@ -300,9 +301,17 @@ class Server:
             if(not os.path.exists(self.data_file_path +self.INBOX_PATH + new_message.receiver_username)):
                 os.mkdir(self.data_file_path +self.INBOX_PATH + new_message.receiver_username)
 
-            if(new_message.urgent == 1):
-                threading.Thread(target=self.propagate_message, args=(new_message,)).start()
-                self._forward_message_to_user(new_message)
+            if(not new_message.already_forwarded):
+                self._log("Forwarding message to user")
+                result = self._forward_message_to_user(new_message)
+                
+                if(result):
+                    new_message.already_forwarded = True
+                    self._log("Message forwarded succesfully")
+                else: self._log("Message forwarding failed")
+
+            if(new_message.urgent == 1):                                
+                threading.Thread(target=self.propagate_message, args=(new_message,)).start()               
             
 
             # Blocco la coda dei messaggi e aggiungo il messaggio appena ricevuto
@@ -335,11 +344,8 @@ class Server:
         self.message_manager.verify_message(message)
 
     def _verify_user_belong_to_cluster(self, message:Message):
-        with open(self.data_file_path + self.NETWORK_PATH + self.SERVERS_FILE, 'r') as servers_file:
-            clusters = json.load(servers_file)
-
-            if(hash_to_range(message.receiver_username.encode(), len(clusters)) != self._my_cluster_id()):
-                raise Exception("User does not belong to this cluster")   
+        if(hash_to_range(message.receiver_username.encode(), self.network.clusters_number()) != self.network.my_cluster_id()):
+            raise Exception("User does not belong to this cluster")   
 
     def _handle_address_notification(self, client_socket, sender_address):
         try:
@@ -363,8 +369,7 @@ class Server:
                 if(not os.path.exists(self.data_file_path + self.INBOX_PATH + username + "/")):
                     os.mkdir(self.data_file_path + self.INBOX_PATH + username + "/")
 
-                with open(self.data_file_path + self.INBOX_PATH + username + "/" + self.INFO_FILE, "w") as user_info_file:
-                    json.dump({"address":int(sender_address)},user_info_file)
+                self.save_user_address(username, int(sender_address))
 
             send_all(client_socket,b"OK")
         except Exception as e:
@@ -376,7 +381,7 @@ class Server:
             self.message_manager._update_chat(
                 message.username, 
                 message.receiver_username, 
-                self._my_cluster(),
+                self.network.my_cluster(),
                 self.messages_queue_lock,
                 self.messages_queue,
                 verify_message=self._verify_user_belong_to_cluster                
@@ -458,31 +463,17 @@ class Server:
             senders = os.listdir(self.data_file_path + self.INBOX_PATH + user+"/")
             senders =  [x.split('.')[0] for x in senders] # Rimozione .json 
                             
-            try:
+            if("info" in senders):
                 senders.remove("info")
+
+            try:
+                address = self.get_user_address(user)
             except Exception as e:
-                pass
+                address = "Unknown"
 
+            social_tree[user] = {"senders":senders, "address":address}
+        return social_tree   
 
-            social_tree[user] = senders
-        return social_tree
-
-    def _my_cluster_id(self):            
-        return hash_to_range(str(self.address).encode(), self.clusters_number())
-    
-    def _my_cluster(self):
-        with open(self.data_file_path + self.NETWORK_PATH + self.SERVERS_FILE, 'r') as servers_info:        
-            clusters = json.load(servers_info)
-            cluster_id = hash_to_range(str(self.address).encode(), len(clusters))
-                
-        my_cluster = clusters[cluster_id]
-        my_cluster.remove(self.address)
-        return my_cluster
-    
-    def clusters_number(self):
-        with open(self.data_file_path + self.NETWORK_PATH + self.SERVERS_FILE, 'r') as servers_info:
-            servers = json.load(servers_info)
-            return len(servers)
     
     def _log(self, log):
         print("SERVER [" + str(self.address) + "]: " + str(log))
